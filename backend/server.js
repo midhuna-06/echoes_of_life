@@ -38,9 +38,6 @@ app.get("/", (req, res) => {
   res.send("Backend + MongoDB working");
 });
 
-app.listen(5000, () => {
-  console.log("Server running on port 5000");
-});
 
 //post api
 
