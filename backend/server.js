@@ -28,7 +28,7 @@ app.listen(5000, () => {
 
 //post api
 
-app.post("/add-memory", async (req, res) => {
+app.post("/add-memory", auth , async (req, res) => {
   try {
     const newMemory = new Memory(req.body);
     const savedMemory = await newMemory.save();
@@ -65,6 +65,53 @@ app.post("/register", async (req, res) => {
     });
 
     await user.save();
+
+    app.post("/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // check user exists
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ msg: "User not found" });
+    }
+
+    // compare password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ msg: "Invalid credentials" });
+    }
+
+    // generate token
+    const token = jwt.sign(
+      { id: user._id },
+      "secretkey",
+      { expiresIn: "1d" }
+    );
+
+    res.json({ token });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+  const auth = (req, res, next) => {
+  try {
+    const token = req.headers["authorization"];
+
+    if (!token) {
+      return res.status(401).json({ msg: "No token" });
+    }
+
+    const verified = jwt.verify(token, "secretkey");
+    req.user = verified;
+
+    next();
+  } catch (err) {
+    res.status(401).json({ msg: "Invalid token" });
+  }
+};
 
     // create token
     const token = jwt.sign({ id: user._id }, "secretkey", { expiresIn: "1d" });
