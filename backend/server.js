@@ -8,16 +8,32 @@ const User = require("./models/User");
 require("dotenv").config();
 
 const app = express();
-
-
 app.use(express.json());
 
-// MongoDB connect
-mongoose.connect(process.env.MONGO_URI)
-.then(() => console.log("MongoDB Connected"))
-.catch(err => console.log(err));
+/* 🔐 AUTH MIDDLEWARE (TOP LEVEL) */
+const auth = (req, res, next) => {
+  try {
+    const token = req.headers["authorization"];
 
-// test route
+    if (!token) {
+      return res.status(401).json({ msg: "No token" });
+    }
+
+    const verified = jwt.verify(token, "secretkey");
+    req.user = verified;
+
+    next();
+  } catch (err) {
+    res.status(401).json({ msg: "Invalid token" });
+  }
+};
+
+/* 🔗 MongoDB Connection */
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log("MongoDB Connected"))
+  .catch(err => console.log(err));
+
+/* 🧪 Test Route */
 app.get("/", (req, res) => {
   res.send("Backend + MongoDB working");
 });
@@ -38,25 +54,22 @@ app.post("/add-memory", auth , async (req, res) => {
   }
 });
 
+/* 📝 REGISTER API */
 app.post("/register", async (req, res) => {
   try {
     const { name, dob, email, password, confirmPassword } = req.body;
 
-    // check password match
     if (password !== confirmPassword) {
       return res.status(400).json({ msg: "Passwords do not match" });
     }
 
-    // check user exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ msg: "User already exists" });
     }
 
-    // hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // save user
     const user = new User({
       name,
       dob,
@@ -121,4 +134,53 @@ app.post("/register", async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+/* 🔑 LOGIN API */
+app.post("/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ msg: "User not found" });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ msg: "Invalid credentials" });
+    }
+
+    const token = jwt.sign(
+      { id: user._id },
+      "secretkey",
+      { expiresIn: "1d" }
+    );
+
+    res.json({ token });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* 🧠 ADD MEMORY (PROTECTED) */
+app.post("/add-memory", auth, async (req, res) => {
+  try {
+    const newMemory = new Memory({
+      ...req.body,
+      userId: req.user.id   // connect memory to user
+    });
+
+    const savedMemory = await newMemory.save();
+    res.json(savedMemory);
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* 🚀 SERVER START */
+app.listen(5000, () => {
+  console.log("Server running on port 5000");
 });
